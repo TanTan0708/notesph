@@ -236,6 +236,38 @@
       align-items: center;
     }
 
+    .thickness-label {
+      font-size: 12px;
+      color: #6b7280;
+      font-weight: 500;
+      margin-top: 4px;
+    }
+
+    .thickness-slider {
+      width: 40px;
+      height: 100px;
+      -webkit-appearance: slider-vertical;
+      writing-mode: bt-lr;
+      cursor: pointer;
+    }
+
+    .thickness-preview {
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #f3f4f6;
+      border-radius: 6px;
+      margin-bottom: 8px;
+    }
+
+    .thickness-preview-dot {
+      background: #000;
+      border-radius: 50%;
+      transition: all 0.2s;
+    }
+
     .color-picker-wrapper {
       position: relative;
       width: 40px;
@@ -363,6 +395,23 @@
     <div class="divider"></div>
     
     <div class="color-palette" id="colorPalette">
+      <span class="thickness-label">Thickness</span>
+      <div class="thickness-preview">
+        <div class="thickness-preview-dot" id="thicknessPreview"></div>
+      </div>
+      <input 
+        type="range" 
+        id="thicknessSlider" 
+        min="1" 
+        max="20" 
+        value="2" 
+        class="thickness-slider"
+        orient="vertical"
+      >
+      
+      <div class="divider" style="width: 100%; margin: 12px 0;"></div>
+      
+      <span class="thickness-label">Color</span>
       <div class="color-picker-wrapper">
         <input type="color" id="colorPicker" value="#000000">
         <div class="color-display" id="colorDisplay" onclick="document.getElementById('colorPicker').click()"></div>
@@ -400,6 +449,7 @@
     let dragOffset = { x: 0, y: 0 };
     let tabs = [];
     let currentTabId = null;
+    let penThickness = 2;
 
     // Initialize
     function init() {
@@ -430,6 +480,18 @@
       colorPicker.addEventListener('input', (e) => {
         color = e.target.value;
         colorDisplay.style.backgroundColor = color;
+        updateThicknessPreview();
+      });
+
+      // Setup thickness slider
+      const thicknessSlider = document.getElementById('thicknessSlider');
+      const thicknessPreview = document.getElementById('thicknessPreview');
+      
+      updateThicknessPreview();
+      
+      thicknessSlider.addEventListener('input', (e) => {
+        penThickness = parseInt(e.target.value);
+        updateThicknessPreview();
       });
 
       // Canvas events
@@ -439,6 +501,14 @@
       canvas.addEventListener('mouseleave', handleMouseUp);
 
       draw();
+    }
+
+    function updateThicknessPreview() {
+      const preview = document.getElementById('thicknessPreview');
+      const size = Math.min(penThickness * 2, 36);
+      preview.style.width = size + 'px';
+      preview.style.height = size + 'px';
+      preview.style.backgroundColor = color;
     }
 
     function createNewTab() {
@@ -615,7 +685,7 @@
       strokes.push({
         tool,
         color,
-        width: 2,
+        width: penThickness,
         points: [pos]
       });
     }
