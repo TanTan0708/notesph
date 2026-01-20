@@ -170,25 +170,36 @@
       display: flex;
       flex-direction: column;
       gap: 8px;
+      align-items: center;
     }
 
-    .color-btn {
-      width: 32px;
-      height: 32px;
+    .color-picker-wrapper {
+      position: relative;
+      width: 40px;
+      height: 40px;
+    }
+
+    .color-display {
+      width: 40px;
+      height: 40px;
       border-radius: 50%;
-      border: 2px solid #d1d5db;
+      border: 3px solid #d1d5db;
       cursor: pointer;
       transition: all 0.2s;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
 
-    .color-btn:hover {
-      transform: scale(1.1);
+    .color-display:hover {
+      transform: scale(1.05);
+      border-color: #3b82f6;
     }
 
-    .color-btn.active {
-      border-color: #000;
-      border-width: 3px;
-      box-shadow: 0 0 0 2px white, 0 0 0 4px #3b82f6;
+    #colorPicker {
+      position: absolute;
+      opacity: 0;
+      width: 40px;
+      height: 40px;
+      cursor: pointer;
     }
 
     canvas {
@@ -281,7 +292,12 @@
 
     <div class="divider"></div>
     
-    <div class="color-palette" id="colorPalette"></div>
+    <div class="color-palette" id="colorPalette">
+      <div class="color-picker-wrapper">
+        <input type="color" id="colorPicker" value="#000000">
+        <div class="color-display" id="colorDisplay" onclick="document.getElementById('colorPicker').click()"></div>
+      </div>
+    </div>
   </div>
 
   <!-- Canvas -->
@@ -313,8 +329,6 @@
     let isDraggingImage = false;
     let dragOffset = { x: 0, y: 0 };
 
-    const colors = ['#000000', '#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#FF00FF', '#00FFFF'];
-
     // Initialize
     function init() {
       resizeCanvas();
@@ -331,14 +345,15 @@
       }
       document.getElementById('noteCode').textContent = noteCode;
 
-      // Create color palette
-      const palette = document.getElementById('colorPalette');
-      colors.forEach(c => {
-        const btn = document.createElement('button');
-        btn.className = 'color-btn' + (c === color ? ' active' : '');
-        btn.style.backgroundColor = c;
-        btn.onclick = () => setColor(c, btn);
-        palette.appendChild(btn);
+      // Setup color picker
+      const colorPicker = document.getElementById('colorPicker');
+      const colorDisplay = document.getElementById('colorDisplay');
+      
+      colorDisplay.style.backgroundColor = color;
+      
+      colorPicker.addEventListener('input', (e) => {
+        color = e.target.value;
+        colorDisplay.style.backgroundColor = color;
       });
 
       // Canvas events
