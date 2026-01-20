@@ -271,6 +271,9 @@
     <button class="tool-btn" onclick="setTool('text')" id="textBtn" title="Text">
       <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 4h12M6 20h12M12 4v16"/></svg>
     </button>
+    <button class="tool-btn" onclick="setTool('select')" id="selectBtn" title="Select/Move">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122"/></svg>
+    </button>
     <label class="tool-btn" style="margin: 0;" title="Import Image">
       <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
       <input type="file" id="imageInput" accept="image/*" onchange="importImage(event)">
@@ -306,6 +309,9 @@
     let texts = [];
     let isPanning = false;
     let lastPos = { x: 0, y: 0 };
+    let selectedImage = null;
+    let isDraggingImage = false;
+    let dragOffset = { x: 0, y: 0 };
 
     const colors = ['#000000', '#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#FF00FF', '#00FFFF'];
 
@@ -382,8 +388,27 @@
         return;
       }
 
+      const pos = getMousePos(e);
+
+      if (tool === 'select') {
+        // Check if clicking on an image
+        for (let i = images.length - 1; i >= 0; i--) {
+          const img = images[i];
+          if (pos.x >= img.x && pos.x <= img.x + img.width &&
+              pos.y >= img.y && pos.y <= img.y + img.height) {
+            selectedImage = img;
+            isDraggingImage = true;
+            dragOffset.x = pos.x - img.x;
+            dragOffset.y = pos.y - img.y;
+            canvas.style.cursor = 'move';
+            draw();
+            return;
+          }
+        }
+        return;
+      }
+
       if (tool === 'text') {
-        const pos = getMousePos(e);
         const text = prompt('Enter text:');
         if (text) {
           texts.push({ content: text, x: pos.x, y: pos.y, color });
@@ -395,7 +420,6 @@
       }
 
       isDrawing = true;
-      const pos = getMousePos(e);
       strokes.push({
         tool,
         color,
@@ -415,9 +439,48 @@
         return;
       }
 
-      if (!isDrawing) return;
-
       const pos = getMousePos(e);
+
+      if (isDraggingImage && selectedImage) {
+        selectedImage.x = pos.x - dragOffset.x;
+        selectedImage.y = pos.y - dragOffset.y;
+        draw();
+        return;
+      }
+
+      if (!isDrawing) return;
+      
+      // If using eraser, check for images and texts to erase
+      if (tool === 'eraser') {
+        const eraserRadius = 20;
+        
+        // Erase images - check if eraser overlaps with image bounds
+        images = images.filter(img => {
+          // Check if any corner or center of image is within eraser radius
+          const points = [
+            { x: img.x, y: img.y },
+            { x: img.x + img.width, y: img.y },
+            { x: img.x, y: img.y + img.height },
+            { x: img.x + img.width, y: img.y + img.height },
+            { x: img.x + img.width/2, y: img.y + img.height/2 }
+          ];
+          
+          for (let point of points) {
+            const distance = Math.sqrt(Math.pow(pos.x - point.x, 2) + Math.pow(pos.y - point.y, 2));
+            if (distance < eraserRadius) {
+              return false; // Remove this image
+            }
+          }
+          return true; // Keep this image
+        });
+        
+        // Erase texts
+        texts = texts.filter(text => {
+          const distance = Math.sqrt(Math.pow(pos.x - text.x, 2) + Math.pow(pos.y - text.y, 2));
+          return distance > eraserRadius;
+        });
+      }
+      
       strokes[strokes.length - 1].points.push(pos);
       draw();
     }
@@ -425,6 +488,14 @@
     function handleMouseUp() {
       if (isPanning) {
         isPanning = false;
+        canvas.style.cursor = 'crosshair';
+        autosave();
+        return;
+      }
+
+      if (isDraggingImage) {
+        isDraggingImage = false;
+        selectedImage = null;
         canvas.style.cursor = 'crosshair';
         autosave();
         return;
@@ -474,6 +545,13 @@
       images.forEach(img => {
         if (img.src && img.loaded) {
           ctx.drawImage(img.element, img.x, img.y, img.width, img.height);
+          
+          // Draw selection border if this image is selected
+          if (tool === 'select' && img === selectedImage) {
+            ctx.strokeStyle = '#3b82f6';
+            ctx.lineWidth = 2 / zoom;
+            ctx.strokeRect(img.x, img.y, img.width, img.height);
+          }
         }
       });
 
