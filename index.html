@@ -450,6 +450,7 @@
     let tabs = [];
     let currentTabId = null;
     let penThickness = 2;
+    let eraserThickness = penThickness;
 
     // Initialize
     function init() {
@@ -494,6 +495,9 @@
         updateThicknessPreview();
       });
 
+
+
+
       // Canvas events
       canvas.addEventListener('mousedown', handleMouseDown);
       canvas.addEventListener('mousemove', handleMouseMove);
@@ -504,12 +508,17 @@
     }
 
     function updateThicknessPreview() {
-      const preview = document.getElementById('thicknessPreview');
-      const size = Math.min(penThickness * 2, 36);
-      preview.style.width = size + 'px';
-      preview.style.height = size + 'px';
-      preview.style.backgroundColor = color;
+    const preview = document.getElementById('thicknessPreview');
+    const size =
+        tool === 'eraser'
+        ? Math.min(eraserThickness * 2, 36)
+        : Math.min(penThickness * 2, 36);
+
+    preview.style.width = size + 'px';
+    preview.style.height = size + 'px';
+    preview.style.backgroundColor = tool === 'eraser' ? '#9ca3af' : color;
     }
+
 
     function createNewTab() {
       const newCode = generateCode();
@@ -629,10 +638,18 @@
     }
 
     function setTool(newTool) {
-      tool = newTool;
-      document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('active'));
-      document.getElementById(newTool + 'Btn').classList.add('active');
+        tool = newTool;
+
+        document.querySelectorAll('.tool-btn')
+            .forEach(btn => btn.classList.remove('active'));
+        document.getElementById(newTool + 'Btn').classList.add('active');
+
+        const slider = document.getElementById('thicknessSlider');
+        slider.value = tool === 'eraser' ? eraserThickness : penThickness;
+
+        updateThicknessPreview();
     }
+
 
     function getMousePos(e) {
       const rect = canvas.getBoundingClientRect();
@@ -683,11 +700,12 @@
 
       isDrawing = true;
       strokes.push({
-        tool,
-        color,
-        width: penThickness,
-        points: [pos]
+      tool,
+      color,
+      width: penThickness,
+      points: [pos]
       });
+
     }
 
     function handleMouseMove(e) {
@@ -714,7 +732,7 @@
       
       // If using eraser, check for images and texts to erase
       if (tool === 'eraser') {
-        const eraserRadius = 20;
+        const eraserRadius = eraserThickness;
         
         // Erase images - check if eraser overlaps with image bounds
         images = images.filter(img => {
@@ -786,7 +804,7 @@
 
         if (stroke.tool === 'eraser') {
           ctx.globalCompositeOperation = 'destination-out';
-          ctx.lineWidth = 20 / zoom;
+          ctx.lineWidth = stroke.width / zoom;
         } else {
           ctx.globalCompositeOperation = 'source-over';
         }
