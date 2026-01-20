@@ -24,11 +24,74 @@
       right: 0;
       background: white;
       box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      z-index: 10;
+    }
+
+    .top-bar-main {
       padding: 16px;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      z-index: 10;
+    }
+
+    .tabs-container {
+      display: flex;
+      gap: 4px;
+      padding: 0 16px;
+      background: #f9fafb;
+      border-top: 1px solid #e5e7eb;
+      overflow-x: auto;
+      white-space: nowrap;
+    }
+
+    .tab {
+      padding: 8px 16px;
+      background: #e5e7eb;
+      border: none;
+      border-radius: 6px 6px 0 0;
+      cursor: pointer;
+      font-size: 14px;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 4px;
+    }
+
+    .tab:hover {
+      background: #d1d5db;
+    }
+
+    .tab.active {
+      background: white;
+      border-bottom: 2px solid #3b82f6;
+    }
+
+    .tab-close {
+      margin-left: 4px;
+      color: #6b7280;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    .tab-close:hover {
+      color: #ef4444;
+    }
+
+    .new-tab-btn {
+      padding: 8px 12px;
+      background: #3b82f6;
+      color: white;
+      border: none;
+      border-radius: 6px 6px 0 0;
+      cursor: pointer;
+      font-size: 18px;
+      margin-top: 4px;
+      transition: all 0.2s;
+    }
+
+    .new-tab-btn:hover {
+      background: #2563eb;
     }
 
     .top-bar-left, .top-bar-right {
@@ -122,7 +185,7 @@
     .sidebar {
       position: fixed;
       left: 16px;
-      top: 96px;
+      top: 150px;
       background: white;
       border-radius: 8px;
       padding: 12px;
@@ -231,37 +294,44 @@
 <body>
   <!-- Top Bar -->
   <div class="top-bar">
-    <div class="top-bar-left">
-      <button onclick="undo()" title="Undo">
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"/></svg>
-        Undo
-      </button>
-      <button onclick="redo()" title="Redo">
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 10h-10a8 8 0 00-8 8v2M21 10l-6 6m6-6l-6-6"/></svg>
-        Redo
-      </button>
-      <button onclick="zoomIn()" title="Zoom In">
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v6m3-3H7"/></svg>
-      </button>
-      <button onclick="zoomOut()" title="Zoom Out">
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM7 10h6"/></svg>
-      </button>
-      <span id="zoomLevel" style="color: #6b7280; font-size: 14px;">100%</span>
+    <div class="top-bar-main">
+      <div class="top-bar-left">
+        <button onclick="undo()" title="Undo">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"/></svg>
+          Undo
+        </button>
+        <button onclick="redo()" title="Redo">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 10h-10a8 8 0 00-8 8v2M21 10l-6 6m6-6l-6-6"/></svg>
+          Redo
+        </button>
+        <button onclick="zoomIn()" title="Zoom In">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v6m3-3H7"/></svg>
+        </button>
+        <button onclick="zoomOut()" title="Zoom Out">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM7 10h6"/></svg>
+        </button>
+        <span id="zoomLevel" style="color: #6b7280; font-size: 14px;">100%</span>
+      </div>
+
+      <div class="top-bar-right">
+        <div class="code-display">
+          <span>Code: </span>
+          <span class="code-value" id="noteCode"></span>
+        </div>
+        <button class="btn-primary" onclick="toggleImport()">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" style="width: 16px; height: 16px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+          Import Notes
+        </button>
+        <button class="btn-success" onclick="exportCanvas()">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" style="width: 16px; height: 16px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+          Export
+        </button>
+      </div>
     </div>
 
-    <div class="top-bar-right">
-      <div class="code-display">
-        <span>Code: </span>
-        <span class="code-value" id="noteCode"></span>
-      </div>
-      <button class="btn-primary" onclick="toggleImport()">
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" style="width: 16px; height: 16px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
-        Import Notes
-      </button>
-      <button class="btn-success" onclick="exportCanvas()">
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" style="width: 16px; height: 16px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
-        Export
-      </button>
+    <!-- Tabs -->
+    <div class="tabs-container" id="tabsContainer">
+      <button class="new-tab-btn" onclick="createNewTab()" title="New Tab">+</button>
     </div>
   </div>
 
@@ -328,22 +398,28 @@
     let selectedImage = null;
     let isDraggingImage = false;
     let dragOffset = { x: 0, y: 0 };
+    let tabs = [];
+    let currentTabId = null;
 
     // Initialize
     function init() {
       resizeCanvas();
       window.addEventListener('resize', resizeCanvas);
       
-      // Generate or load note code
-      const savedCode = localStorage.getItem('currentNoteCode');
-      if (savedCode) {
-        noteCode = savedCode;
-        loadNoteData(noteCode);
+      // Load or create tabs
+      const savedTabs = localStorage.getItem('tabs');
+      if (savedTabs) {
+        tabs = JSON.parse(savedTabs);
+        if (tabs.length > 0) {
+          switchTab(tabs[0].id);
+        } else {
+          createNewTab();
+        }
       } else {
-        noteCode = generateCode();
-        localStorage.setItem('currentNoteCode', noteCode);
+        createNewTab();
       }
-      document.getElementById('noteCode').textContent = noteCode;
+
+      renderTabs();
 
       // Setup color picker
       const colorPicker = document.getElementById('colorPicker');
@@ -365,6 +441,113 @@
       draw();
     }
 
+    function createNewTab() {
+      const newCode = generateCode();
+      const newTab = {
+        id: newCode,
+        name: `Tab ${tabs.length + 1}`
+      };
+      tabs.push(newTab);
+      saveTabs();
+      switchTab(newCode);
+      renderTabs();
+    }
+
+    function switchTab(tabId) {
+      // Save current tab data
+      if (currentTabId) {
+        saveCurrentTab();
+      }
+
+      // Switch to new tab
+      currentTabId = tabId;
+      noteCode = tabId;
+      localStorage.setItem('currentNoteCode', tabId);
+      document.getElementById('noteCode').textContent = tabId;
+
+      // Load tab data
+      loadNoteData(tabId);
+      renderTabs();
+    }
+
+    function saveCurrentTab() {
+      if (noteCode) {
+        const saveData = {
+          strokes,
+          images: images.map(img => ({ src: img.src, x: img.x, y: img.y, width: img.width, height: img.height })),
+          texts,
+          zoom,
+          pan
+        };
+        localStorage.setItem(`note_${noteCode}`, JSON.stringify(saveData));
+      }
+    }
+
+    function closeTab(tabId, event) {
+      event.stopPropagation();
+      
+      if (tabs.length === 1) {
+        alert('Cannot close the last tab!');
+        return;
+      }
+
+      const tabIndex = tabs.findIndex(t => t.id === tabId);
+      tabs.splice(tabIndex, 1);
+      
+      // Delete the tab's data
+      localStorage.removeItem(`note_${tabId}`);
+      
+      saveTabs();
+
+      // Switch to another tab if we closed the current one
+      if (currentTabId === tabId) {
+        const newIndex = Math.max(0, tabIndex - 1);
+        switchTab(tabs[newIndex].id);
+      } else {
+        renderTabs();
+      }
+    }
+
+    function renameTab(tabId) {
+      const tab = tabs.find(t => t.id === tabId);
+      if (tab) {
+        const newName = prompt('Enter new tab name:', tab.name);
+        if (newName && newName.trim()) {
+          tab.name = newName.trim();
+          saveTabs();
+          renderTabs();
+        }
+      }
+    }
+
+    function renderTabs() {
+      const container = document.getElementById('tabsContainer');
+      const newTabBtn = container.querySelector('.new-tab-btn');
+      
+      // Clear existing tabs
+      container.innerHTML = '';
+      
+      // Render tabs
+      tabs.forEach(tab => {
+        const tabEl = document.createElement('button');
+        tabEl.className = 'tab' + (tab.id === currentTabId ? ' active' : '');
+        tabEl.onclick = () => switchTab(tab.id);
+        tabEl.ondblclick = () => renameTab(tab.id);
+        tabEl.innerHTML = `
+          <span>${tab.name}</span>
+          <span class="tab-close" onclick="closeTab('${tab.id}', event)">×</span>
+        `;
+        container.appendChild(tabEl);
+      });
+
+      // Add new tab button at the end
+      container.appendChild(newTabBtn);
+    }
+
+    function saveTabs() {
+      localStorage.setItem('tabs', JSON.stringify(tabs));
+    }
+
     function resizeCanvas() {
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
@@ -379,12 +562,6 @@
       tool = newTool;
       document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('active'));
       document.getElementById(newTool + 'Btn').classList.add('active');
-    }
-
-    function setColor(newColor, btn) {
-      color = newColor;
-      document.querySelectorAll('.color-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
     }
 
     function getMousePos(e) {
