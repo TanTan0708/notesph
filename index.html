@@ -827,7 +827,7 @@
       if (tool === 'text') {
         const text = prompt('Enter text:');
         if (text) {
-          texts.push({ content: text, x: pos.x, y: pos.y, color });
+          texts.push({ content: text, x: pos.x, y: pos.y, color, layerId: activeLayerId });
           addToHistory();
           draw();
           autosave();
@@ -949,7 +949,8 @@
 
       if (isDraggingImage) {
         isDraggingImage = false;
-        selectedImage = null;
+        // keep selectedImage so handles remain visible and clickable
+        // selectedImage = null;
         canvas.style.cursor = 'crosshair';
         autosave();
         return;
@@ -1175,7 +1176,7 @@
       if (savedData) {
         const data = JSON.parse(savedData);
         strokes = data.strokes || [];
-        texts = data.texts || [];
+        texts = (data.texts || []).map(t => ({ ...t, layerId: t.layerId || (layers && layers[0] && layers[0].id) || activeLayerId }));
         zoom = data.zoom || 1;
         pan = data.pan || { x: 0, y: 0 };
         // Load images
