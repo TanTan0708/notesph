@@ -314,6 +314,45 @@
       color: #6b7280;
     }
 
+    /* Layers panel */
+    .layers-panel {
+      position: fixed;
+      right: 16px;
+      bottom: 16px;
+      background: white;
+      padding: 8px;
+      border-radius: 8px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.12);
+      z-index: 30;
+      width: 220px;
+      font-size: 13px;
+    }
+
+    .layers-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .layer-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 6px 8px;
+      border-radius: 6px;
+      cursor: pointer;
+      background: #f8fafc;
+      margin-bottom: 6px;
+    }
+
+    .layer-item.active { background: #eef2ff; border: 1px solid #c7d2fe; }
+
+    .layer-controls { display: flex; gap: 6px; align-items: center; }
+
+
     .hidden {
       display: none;
     }
@@ -427,6 +466,17 @@
     Middle-click or Ctrl+drag to pan
   </div>
 
+  <!-- Layers Panel -->
+  <div class="layers-panel" id="layersPanel">
+    <div class="layers-header">
+      <strong>Layers</strong>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <button onclick="addLayer()" title="Add layer" style="padding:6px 8px;border-radius:6px;background:#3b82f6;color:#fff;border:none;">+</button>
+      </div>
+    </div>
+    <div id="layersList"></div>
+  </div>
+
   <script>
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
@@ -442,11 +492,16 @@
     let noteCode = '';
     let images = [];
     let texts = [];
+    let layers = [];
+    let activeLayerId = null;
     let isPanning = false;
     let lastPos = { x: 0, y: 0 };
     let selectedImage = null;
     let isDraggingImage = false;
     let dragOffset = { x: 0, y: 0 };
+    let transformMode = null; // 'resize'|'rotate'
+    let transformHandle = null;
+    let transformStart = null;
     let tabs = [];
     let currentTabId = null;
     let penThickness = 2;
@@ -495,6 +550,9 @@
         updateThicknessPreview();
       });
 
+      // Render layers UI
+      renderLayersPanel();
+
 
 
 
@@ -532,6 +590,70 @@
       renderTabs();
     }
 
+    function addLayer(name = null) {
+      const id = Math.random().toString(36).slice(2, 9);
+      const layer = { id, name: name || `Layer ${layers.length + 1}`, visible: true };
+      layers.push(layer);
+      activeLayerId = id;
+      renderLayersPanel();
+      draw();
+      autosave();
+    }
+
+    function renderLayersPanel() {
+      const list = document.getElementById('layersList');
+      list.innerHTML = '';
+      // Ensure at least one layer
+      if (layers.length === 0) {
+        addLayer('Default');
+        return;
+      }
+      // Render in reverse so topmost is last in array but appears first visually
+      for (let i = layers.length - 1; i >= 0; i--) {
+        const layer = layers[i];
+        const el = document.createElement('div');
+        el.className = 'layer-item' + (layer.id === activeLayerId ? ' active' : '');
+        el.onclick = () => { activeLayerId = layer.id; renderLayersPanel(); };
+        el.innerHTML = `
+          <div style="display:flex;align-items:center;gap:8px;">
+            <input type="checkbox" ${layer.visible ? 'checked' : ''} onchange="toggleLayerVisibility('${layer.id}', event)">
+            <span>${layer.name}</span>
+          </div>
+          <div class="layer-controls">
+            <button onclick="bringLayerUp('${layer.id}', event)" title="Bring up" style="padding:4px 6px">↑</button>
+            <button onclick="sendLayerDown('${layer.id}', event)" title="Send down" style="padding:4px 6px">↓</button>
+          </div>
+        `;
+        list.appendChild(el);
+      }
+    }
+
+    function toggleLayerVisibility(id, e) {
+      e.stopPropagation();
+      const layer = layers.find(l => l.id === id);
+      if (layer) layer.visible = e.target.checked;
+      draw();
+      autosave();
+    }
+
+    function bringLayerUp(id, e) {
+      e.stopPropagation();
+      const idx = layers.findIndex(l => l.id === id);
+      if (idx < layers.length - 1) {
+        const tmp = layers[idx]; layers[idx] = layers[idx+1]; layers[idx+1] = tmp;
+        renderLayersPanel(); draw(); autosave();
+      }
+    }
+
+    function sendLayerDown(id, e) {
+      e.stopPropagation();
+      const idx = layers.findIndex(l => l.id === id);
+      if (idx > 0) {
+        const tmp = layers[idx]; layers[idx] = layers[idx-1]; layers[idx-1] = tmp;
+        renderLayersPanel(); draw(); autosave();
+      }
+    }
+
     function switchTab(tabId) {
       // Save current tab data
       if (currentTabId) {
@@ -553,8 +675,10 @@
       if (noteCode) {
         const saveData = {
           strokes,
-          images: images.map(img => ({ src: img.src, x: img.x, y: img.y, width: img.width, height: img.height })),
+          images: images.map(img => ({ src: img.src, x: img.x, y: img.y, width: img.width, height: img.height, rotation: img.rotation || 0, layerId: img.layerId || activeLayerId })),
           texts,
+          layers,
+          activeLayerId,
           zoom,
           pan
         };
@@ -670,11 +794,22 @@
       const pos = getMousePos(e);
 
       if (tool === 'select') {
-        // Check if clicking on an image
+        // Check handles first if an image is selected
+        if (selectedImage) {
+          const handle = getHandleUnderPos(pos, selectedImage);
+          if (handle) {
+            transformMode = handle.type;
+            transformHandle = handle.name;
+            transformStart = { pos, img: { x: selectedImage.x, y: selectedImage.y, width: selectedImage.width, height: selectedImage.height, rotation: selectedImage.rotation || 0 } };
+            return;
+          }
+        }
+
+        // Check if clicking on an image (top-down)
         for (let i = images.length - 1; i >= 0; i--) {
           const img = images[i];
-          if (pos.x >= img.x && pos.x <= img.x + img.width &&
-              pos.y >= img.y && pos.y <= img.y + img.height) {
+          if (!isLayerVisibleForItem(img.layerId)) continue;
+          if (pointInRotatedRect(pos, img)) {
             selectedImage = img;
             isDraggingImage = true;
             dragOffset.x = pos.x - img.x;
@@ -684,6 +819,8 @@
             return;
           }
         }
+        selectedImage = null;
+        draw();
         return;
       }
 
@@ -700,10 +837,11 @@
 
       isDrawing = true;
       strokes.push({
-      tool,
-      color,
-      width: penThickness,
-      points: [pos]
+        tool,
+        color,
+        width: penThickness,
+        points: [pos],
+        layerId: activeLayerId
       });
 
     }
@@ -721,6 +859,42 @@
 
       const pos = getMousePos(e);
 
+      if (transformMode && selectedImage) {
+        // Perform transform (resize or rotate)
+        if (transformMode === 'resize') {
+          // Simple scale based on handle: adjust width/height keeping opposite corner
+          const start = transformStart;
+          if (!start) return;
+          // We'll compute scale based on mouse delta relative to image center
+          const cx = start.img.x + start.img.width / 2;
+          const cy = start.img.y + start.img.height / 2;
+          const startDistX = pos.x - cx;
+          const startDistY = pos.y - cy;
+          // keep aspect ratio by default
+          const newWidth = Math.max(10, Math.abs(startDistX) * 2);
+          const newHeight = Math.max(10, Math.abs(startDistY) * 2);
+          selectedImage.width = newWidth;
+          selectedImage.height = newHeight;
+          // recompute top-left from center
+          selectedImage.x = cx - selectedImage.width / 2;
+          selectedImage.y = cy - selectedImage.height / 2;
+          draw();
+          return;
+        }
+        if (transformMode === 'rotate') {
+          const start = transformStart;
+          if (!start) return;
+          const cx = selectedImage.x + selectedImage.width / 2;
+          const cy = selectedImage.y + selectedImage.height / 2;
+          const a1 = Math.atan2(transformStart.pos.y - cy, transformStart.pos.x - cx);
+          const a2 = Math.atan2(pos.y - cy, pos.x - cx);
+          const delta = a2 - a1;
+          selectedImage.rotation = (start.img.rotation || 0) + delta;
+          draw();
+          return;
+        }
+      }
+
       if (isDraggingImage && selectedImage) {
         selectedImage.x = pos.x - dragOffset.x;
         selectedImage.y = pos.y - dragOffset.y;
@@ -730,13 +904,13 @@
 
       if (!isDrawing) return;
       
-      // If using eraser, check for images and texts to erase
+      // If using eraser, check for images and texts to erase (only visible layer items)
       if (tool === 'eraser') {
         const eraserRadius = eraserThickness;
         
         // Erase images - check if eraser overlaps with image bounds
         images = images.filter(img => {
-          // Check if any corner or center of image is within eraser radius
+          if (!isLayerVisibleForItem(img.layerId)) return true;
           const points = [
             { x: img.x, y: img.y },
             { x: img.x + img.width, y: img.y },
@@ -744,18 +918,18 @@
             { x: img.x + img.width, y: img.y + img.height },
             { x: img.x + img.width/2, y: img.y + img.height/2 }
           ];
-          
           for (let point of points) {
             const distance = Math.sqrt(Math.pow(pos.x - point.x, 2) + Math.pow(pos.y - point.y, 2));
             if (distance < eraserRadius) {
               return false; // Remove this image
             }
           }
-          return true; // Keep this image
+          return true;
         });
         
         // Erase texts
         texts = texts.filter(text => {
+          if (!isLayerVisibleForItem(text.layerId)) return true;
           const distance = Math.sqrt(Math.pow(pos.x - text.x, 2) + Math.pow(pos.y - text.y, 2));
           return distance > eraserRadius;
         });
@@ -781,6 +955,14 @@
         return;
       }
 
+      if (transformMode) {
+        transformMode = null;
+        transformHandle = null;
+        transformStart = null;
+        autosave();
+        return;
+      }
+
       if (isDrawing) {
         isDrawing = false;
         addToHistory();
@@ -794,54 +976,143 @@
       ctx.translate(pan.x, pan.y);
       ctx.scale(zoom, zoom);
 
-      // Draw strokes
-      strokes.forEach(stroke => {
-        ctx.beginPath();
-        ctx.strokeStyle = stroke.color;
-        ctx.lineWidth = stroke.width / zoom;
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
+      // Ensure layers exist
+      if (!layers || layers.length === 0) {
+        // fallback: draw everything
+        layers = [{ id: 'default', name: 'Default', visible: true }];
+        activeLayerId = activeLayerId || layers[0].id;
+      }
 
-        if (stroke.tool === 'eraser') {
-          ctx.globalCompositeOperation = 'destination-out';
+      // Draw by layer order (array order is bottom->top)
+      for (let li = 0; li < layers.length; li++) {
+        const layer = layers[li];
+        if (!layer.visible) continue;
+
+        // strokes for this layer
+        strokes.filter(s => s.layerId === layer.id).forEach(stroke => {
+          ctx.beginPath();
+          ctx.strokeStyle = stroke.color;
           ctx.lineWidth = stroke.width / zoom;
-        } else {
-          ctx.globalCompositeOperation = 'source-over';
-        }
-
-        stroke.points.forEach((point, index) => {
-          if (index === 0) {
-            ctx.moveTo(point.x, point.y);
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+          if (stroke.tool === 'eraser') {
+            ctx.globalCompositeOperation = 'destination-out';
+            ctx.lineWidth = stroke.width / zoom;
           } else {
-            ctx.lineTo(point.x, point.y);
+            ctx.globalCompositeOperation = 'source-over';
+          }
+          stroke.points.forEach((point, index) => {
+            if (index === 0) ctx.moveTo(point.x, point.y);
+            else ctx.lineTo(point.x, point.y);
+          });
+          ctx.stroke();
+        });
+
+        ctx.globalCompositeOperation = 'source-over';
+
+        // images for this layer
+        images.filter(img => img.layerId === layer.id).forEach(img => {
+          if (img.src && img.loaded) {
+            // draw with rotation support
+            const cx = img.x + img.width / 2;
+            const cy = img.y + img.height / 2;
+            ctx.save();
+            ctx.translate(cx, cy);
+            ctx.rotate(img.rotation || 0);
+            ctx.drawImage(img.element, -img.width / 2, -img.height / 2, img.width, img.height);
+            ctx.restore();
+
+            // draw selection border if selected
+            if (tool === 'select' && img === selectedImage) {
+              ctx.save();
+              ctx.translate(cx, cy);
+              ctx.rotate(img.rotation || 0);
+              ctx.strokeStyle = '#3b82f6';
+              ctx.lineWidth = 2 / zoom;
+              ctx.strokeRect(-img.width / 2, -img.height / 2, img.width, img.height);
+              ctx.restore();
+              // draw handles
+              drawSelectionHandles(img);
+            }
           }
         });
+
+        // texts for this layer
+        ctx.font = `${24 / zoom}px Arial`;
+        texts.filter(t => t.layerId === layer.id).forEach(text => {
+          ctx.fillStyle = text.color;
+          ctx.fillText(text.content, text.x, text.y);
+        });
+      }
+
+      ctx.restore();
+    }
+
+    // Helpers for transforms and hit-testing
+    function isLayerVisibleForItem(layerId) {
+      const layer = layers.find(l => l.id === layerId);
+      return !layer || layer.visible;
+    }
+
+    function rotatePoint(px, py, cx, cy, angle) {
+      const s = Math.sin(angle), c = Math.cos(angle);
+      const x = px - cx, y = py - cy;
+      return { x: x * c - y * s + cx, y: x * s + y * c + cy };
+    }
+
+    function pointInRotatedRect(pt, img) {
+      const cx = img.x + img.width / 2;
+      const cy = img.y + img.height / 2;
+      const angle = img.rotation || 0;
+      // rotate point back by -angle around center
+      const s = Math.sin(-angle), c = Math.cos(-angle);
+      const x = pt.x - cx, y = pt.y - cy;
+      const rx = x * c - y * s;
+      const ry = x * s + y * c;
+      return rx >= -img.width/2 && rx <= img.width/2 && ry >= -img.height/2 && ry <= img.height/2;
+    }
+
+    function getHandlePositions(img) {
+      // returns array of {name, x, y, type}
+      const cx = img.x + img.width / 2;
+      const cy = img.y + img.height / 2;
+      const halfW = img.width / 2;
+      const halfH = img.height / 2;
+      const pts = [
+        { name: 'nw', x: cx - halfW, y: cy - halfH, type: 'resize' },
+        { name: 'ne', x: cx + halfW, y: cy - halfH, type: 'resize' },
+        { name: 'sw', x: cx - halfW, y: cy + halfH, type: 'resize' },
+        { name: 'se', x: cx + halfW, y: cy + halfH, type: 'resize' },
+        { name: 'rotate', x: cx, y: cy - halfH - 20, type: 'rotate' }
+      ];
+      // rotate each by img.rotation
+      return pts.map(p => {
+        const r = rotatePoint(p.x, p.y, cx, cy, img.rotation || 0);
+        return { name: p.name, x: r.x, y: r.y, type: p.type };
+      });
+    }
+
+    function getHandleUnderPos(pos, img) {
+      const handles = getHandlePositions(img);
+      for (let h of handles) {
+        const dist = Math.hypot(pos.x - h.x, pos.y - h.y);
+        if (dist < 10) return h;
+      }
+      return null;
+    }
+
+    function drawSelectionHandles(img) {
+      const handles = getHandlePositions(img);
+      ctx.save();
+      ctx.fillStyle = '#fff';
+      ctx.strokeStyle = '#3b82f6';
+      ctx.lineWidth = 2 / zoom;
+      handles.forEach(h => {
+        ctx.beginPath();
+        ctx.rect(h.x - 6, h.y - 6, 12, 12);
+        ctx.fill();
         ctx.stroke();
       });
-
-      ctx.globalCompositeOperation = 'source-over';
-
-      // Draw images
-      images.forEach(img => {
-        if (img.src && img.loaded) {
-          ctx.drawImage(img.element, img.x, img.y, img.width, img.height);
-          
-          // Draw selection border if this image is selected
-          if (tool === 'select' && img === selectedImage) {
-            ctx.strokeStyle = '#3b82f6';
-            ctx.lineWidth = 2 / zoom;
-            ctx.strokeRect(img.x, img.y, img.width, img.height);
-          }
-        }
-      });
-
-      // Draw texts
-      ctx.font = `${24 / zoom}px Arial`;
-      texts.forEach(text => {
-        ctx.fillStyle = text.color;
-        ctx.fillText(text.content, text.x, text.y);
-      });
-
       ctx.restore();
     }
 
@@ -888,8 +1159,10 @@
       if (noteCode && (strokes.length > 0 || images.length > 0 || texts.length > 0)) {
         const saveData = {
           strokes,
-          images: images.map(img => ({ src: img.src, x: img.x, y: img.y, width: img.width, height: img.height })),
+          images: images.map(img => ({ src: img.src, x: img.x, y: img.y, width: img.width, height: img.height, rotation: img.rotation || 0, layerId: img.layerId || activeLayerId })),
           texts,
+          layers,
+          activeLayerId,
           zoom,
           pan
         };
@@ -905,7 +1178,6 @@
         texts = data.texts || [];
         zoom = data.zoom || 1;
         pan = data.pan || { x: 0, y: 0 };
-        
         // Load images
         images = [];
         if (data.images) {
@@ -919,6 +1191,8 @@
                 y: imgData.y,
                 width: imgData.width,
                 height: imgData.height,
+                rotation: imgData.rotation || 0,
+                layerId: imgData.layerId || null,
                 loaded: true
               });
               draw();
@@ -926,10 +1200,15 @@
             img.src = imgData.src;
           });
         }
+
+        // Load layers
+        layers = data.layers && data.layers.length ? data.layers : [{ id: 'default', name: 'Default', visible: true }];
+        activeLayerId = data.activeLayerId || layers[0].id;
         
         history = [JSON.parse(JSON.stringify(strokes))];
         historyStep = 0;
         document.getElementById('zoomLevel').textContent = Math.round(zoom * 100) + '%';
+        renderLayersPanel();
         draw();
       } else {
         // New note - start fresh
@@ -941,6 +1220,9 @@
         history = [[]];
         historyStep = 0;
         document.getElementById('zoomLevel').textContent = '100%';
+        layers = [{ id: 'default', name: 'Default', visible: true }];
+        activeLayerId = layers[0].id;
+        renderLayersPanel();
         draw();
       }
     }
@@ -984,6 +1266,8 @@
               y: -pan.y / zoom,
               width: img.width,
               height: img.height,
+              rotation: 0,
+              layerId: activeLayerId,
               loaded: true
             });
             addToHistory();
