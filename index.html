@@ -561,6 +561,11 @@
       canvas.addEventListener('mousemove', handleMouseMove);
       canvas.addEventListener('mouseup', handleMouseUp);
       canvas.addEventListener('mouseleave', handleMouseUp);
+      // Touch events for mobile
+      canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
+      canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
+      canvas.addEventListener('touchend', handleTouchEnd);
+      canvas.addEventListener('touchcancel', handleTouchEnd);
 
       draw();
     }
@@ -1095,26 +1100,81 @@
 
     function getHandleUnderPos(pos, img) {
       const handles = getHandlePositions(img);
+      const touchTarget = (navigator.maxTouchPoints && navigator.maxTouchPoints > 0) ? 18 : 10;
       for (let h of handles) {
         const dist = Math.hypot(pos.x - h.x, pos.y - h.y);
-        if (dist < 10) return h;
+        if (dist < touchTarget) return h;
       }
       return null;
     }
 
     function drawSelectionHandles(img) {
       const handles = getHandlePositions(img);
+      const size = (navigator.maxTouchPoints && navigator.maxTouchPoints > 0) ? 18 : 12;
       ctx.save();
       ctx.fillStyle = '#fff';
       ctx.strokeStyle = '#3b82f6';
       ctx.lineWidth = 2 / zoom;
       handles.forEach(h => {
         ctx.beginPath();
-        ctx.rect(h.x - 6, h.y - 6, 12, 12);
+        ctx.rect(h.x - size/2, h.y - size/2, size, size);
         ctx.fill();
         ctx.stroke();
       });
       ctx.restore();
+    }
+
+    // Touch handlers: map single touch to mouse handlers, two-finger pan
+    function getTouchMidpoint(t1, t2) {
+      return { x: (t1.clientX + t2.clientX) / 2, y: (t1.clientY + t2.clientY) / 2 };
+    }
+
+    function handleTouchStart(e) {
+      if (e.touches.length === 2) {
+        isPanning = true;
+        const mid = getTouchMidpoint(e.touches[0], e.touches[1]);
+        lastPos = { x: mid.x, y: mid.y };
+        canvas.style.cursor = 'grabbing';
+        e.preventDefault();
+        return;
+      }
+      const t = e.touches[0];
+      if (!t) return;
+      const ev = { clientX: t.clientX, clientY: t.clientY, button: 0, ctrlKey: false };
+      handleMouseDown(ev);
+      e.preventDefault();
+    }
+
+    function handleTouchMove(e) {
+      if (e.touches.length === 2 && isPanning) {
+        const mid = getTouchMidpoint(e.touches[0], e.touches[1]);
+        const dx = mid.x - lastPos.x;
+        const dy = mid.y - lastPos.y;
+        pan.x += dx;
+        pan.y += dy;
+        lastPos = { x: mid.x, y: mid.y };
+        draw();
+        e.preventDefault();
+        return;
+      }
+      const t = e.touches[0];
+      if (!t) return;
+      const ev = { clientX: t.clientX, clientY: t.clientY, button: 0, ctrlKey: false };
+      handleMouseMove(ev);
+      e.preventDefault();
+    }
+
+    function handleTouchEnd(e) {
+      if (isPanning && e.touches.length < 2) {
+        isPanning = false;
+        canvas.style.cursor = 'crosshair';
+        autosave();
+        return;
+      }
+      // If no more touches, end drawing/drag
+      if (e.touches.length === 0) {
+        handleMouseUp();
+      }
     }
 
     function addToHistory() {
