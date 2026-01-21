@@ -408,7 +408,7 @@
 
   <!-- Import Modal -->
   <div id="importModal" class="import-modal">
-    <input type="text" id="importCode" placeholder="Enter note code" maxlength="6">
+    <input type="text" id="importCode" placeholder="Enter note code" maxlength="5">
     <button class="btn-primary" style="width: 100%;" onclick="loadNote()">Load</button>
   </div>
 
@@ -549,6 +549,21 @@
         penThickness = parseInt(e.target.value);
         updateThicknessPreview();
       });
+
+      // Ensure import code input respects 5-char uppercase format
+      const importInput = document.getElementById('importCode');
+      if (importInput) {
+        importInput.addEventListener('input', (e) => {
+          const cleaned = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0,5);
+          if (e.target.value !== cleaned) e.target.value = cleaned;
+        });
+        importInput.addEventListener('paste', (ev) => {
+          ev.preventDefault();
+          const paste = (ev.clipboardData || window.clipboardData).getData('text') || '';
+          const cleaned = paste.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0,5);
+          importInput.value = cleaned;
+        });
+      }
 
       // Render layers UI
       renderLayersPanel();
@@ -702,8 +717,8 @@
       const tabIndex = tabs.findIndex(t => t.id === tabId);
       tabs.splice(tabIndex, 1);
       
-      // Delete the tab's data
-      localStorage.removeItem(`note_${tabId}`);
+      // NOTE: do not delete the tab's saved data from localStorage when closing the tab.
+      // That allows users to re-open/import the note later using its code.
       
       saveTabs();
 
@@ -763,7 +778,7 @@
     }
 
     function generateCode() {
-      return Math.random().toString(36).substring(2, 8).toUpperCase();
+      return Math.random().toString(36).substring(2, 7).toUpperCase();
     }
 
     function setTool(newTool) {
@@ -1296,10 +1311,15 @@
     function loadNote() {
       const code = document.getElementById('importCode').value.toUpperCase();
       if (code) {
-        noteCode = code;
-        localStorage.setItem('currentNoteCode', code);
-        document.getElementById('noteCode').textContent = code;
-        loadNoteData(code);
+        // If this code isn't already a tab, add it so user can switch to it
+        const existing = tabs.find(t => t.id === code);
+        if (!existing) {
+          tabs.push({ id: code, name: code });
+          saveTabs();
+        }
+
+        // Switch to the tab (this will save current tab and load the saved data)
+        switchTab(code);
         toggleImport();
         document.getElementById('importCode').value = '';
       }
